@@ -6,7 +6,16 @@ from importlib.resources import files
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Slot
-from PySide6.QtGui import QCloseEvent, QFont, QFontDatabase, QIcon, QImage
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QFont,
+    QFontDatabase,
+    QIcon,
+    QImage,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -47,6 +56,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(load_app_icon())
         self.resize(1040, 760)
         self.setMinimumSize(720, 520)
+        self.setAcceptDrops(True)
 
         self.thread_pool = QThreadPool(self)
         self.thread_pool.setMaxThreadCount(4)
@@ -116,7 +126,7 @@ class MainWindow(QMainWindow):
         self.grid.setContentsMargins(12, 12, 12, 12)
         self.grid.setSpacing(12)
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.empty_label = QLabel("請先選取 PDF 檔案")
+        self.empty_label = QLabel("請先選取 PDF 檔案，或將 PDF 拖曳到視窗")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.grid.addWidget(self.empty_label, 0, 0)
         self.scroll_area.setWidget(self.grid_host)
@@ -149,6 +159,35 @@ class MainWindow(QMainWindow):
         if watched is self.scroll_area.viewport() and event.type() == QEvent.Type.Resize:
             QTimer.singleShot(0, self._reflow_grid)
         return super().eventFilter(watched, event)
+
+    def _dropped_pdf(self, event: QDragEnterEvent | QDragMoveEvent | QDropEvent) -> Path | None:
+        if not self.open_button.isEnabled():
+            return None
+        urls = event.mimeData().urls()
+        if len(urls) != 1 or not urls[0].isLocalFile():
+            return None
+        path = Path(urls[0].toLocalFile())
+        return path if path.suffix.lower() == ".pdf" and path.is_file() else None
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._dropped_pdf(event) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if self._dropped_pdf(event) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        path = self._dropped_pdf(event)
+        if path is None:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.load_pdf(path)
 
     @Slot()
     def choose_pdf(self) -> None:
