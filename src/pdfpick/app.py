@@ -39,6 +39,7 @@ from pdfpick.core import (
     parity_state,
     set_parity,
 )
+from pdfpick import __version__
 from pdfpick.theme import ThemeController
 from pdfpick.renderer import RenderService, start_render_backend
 from pdfpick.widgets import PageCard
@@ -52,7 +53,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, render_backend=None) -> None:
         super().__init__()
-        self.setWindowTitle("PDF 選頁重組工具")
+        self.setWindowTitle(f"PDF 選頁重組工具 {__version__} 版")
         self.setWindowIcon(load_app_icon())
         self.resize(1040, 760)
         self.setMinimumSize(720, 520)
