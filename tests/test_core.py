@@ -73,3 +73,13 @@ def test_inspect_rejects_invalid_and_encrypted_pdf(tmp_path: Path) -> None:
         writer.write(stream)
     with pytest.raises(UnsupportedEncryptedPdfError):
         inspect_pdf(encrypted)
+
+
+def test_export_preserves_explicit_page_order(tmp_path: Path) -> None:
+    source = tmp_path / "source.pdf"
+    output = tmp_path / "reordered.pdf"
+    make_pdf(source, [200, 300, 400, 500])
+
+    assert export_selected_pages(source, output, [3, 0, 2]) == 3
+    reader = PdfReader(output)
+    assert [int(page.mediabox.width) for page in reader.pages] == [500, 200, 400]

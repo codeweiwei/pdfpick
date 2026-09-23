@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from pypdf import PdfWriter
+from PySide6.QtWidgets import QMessageBox
+from pypdf import PdfReader, PdfWriter
 
 from pdfpick.app import MainWindow, load_app_icon
 
@@ -76,3 +77,36 @@ def test_pdf_loads_and_renders_page_previews(qtbot, tmp_path: Path) -> None:
     )
     assert window.path_label.text() == str(source.resolve())
     assert window.page_cards[0].preview.pixmap().width() == 400
+
+
+def test_reorder_keeps_original_parity_and_export_order(qtbot, monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "source.pdf"
+    output = tmp_path / "reordered.pdf"
+    writer = PdfWriter()
+    for width in (200, 300, 400, 500):
+        writer.add_blank_page(width=width, height=width + 100)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    monkeypatch.setattr(window, "_queue_all_renders", lambda: None)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+    window.session_id = 1
+    window._pdf_loaded(1, source, 4)
+
+    window._move_page(0, 2)
+    window._move_page(3, 1)
+    assert window.page_order == [3, 1, 2, 0]
+    assert [window.grid.itemAt(index).widget().page_index for index in range(4)] == window.page_order
+
+    window.odd_checkbox.click()
+    assert window.selected_pages == {0, 2}
+    assert window.page_cards[0].checkbox.isChecked()
+    assert window.page_cards[2].checkbox.isChecked()
+    assert window.odd_checkbox.checkState() == Qt.CheckState.Checked
+
+    window._start_export(output)
+    qtbot.waitUntil(lambda: not window._export_running, timeout=5_000)
+    reader = PdfReader(output)
+    assert [int(page.mediabox.width) for page in reader.pages] == [400, 200]

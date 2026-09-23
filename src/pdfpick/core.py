@@ -89,7 +89,10 @@ def export_selected_pages(
 ) -> int:
     source_path = Path(source).resolve()
     destination_path = Path(destination).resolve()
-    ordered = sorted(set(selected))
+    ordered = (
+        sorted(selected) if isinstance(selected, (set, frozenset))
+        else list(dict.fromkeys(selected))
+    )
     if not ordered:
         raise ValueError("請至少選取一頁。")
     if source_path == destination_path:
@@ -104,7 +107,7 @@ def export_selected_pages(
         if reader.is_encrypted:
             raise UnsupportedEncryptedPdfError("目前不支援密碼保護的 PDF。")
         page_count = len(reader.pages)
-        if ordered[0] < 0 or ordered[-1] >= page_count:
+        if any(page < 0 or page >= page_count for page in ordered):
             raise IndexError("選取的頁碼超出來源 PDF 範圍。")
 
         writer = PdfWriter()

@@ -35,12 +35,12 @@ class ExportSignals(QObject):
 
 class ExportPdfTask(QRunnable):
     def __init__(
-        self, source: Path, destination: Path, selected: set[int], session_id: int
+        self, source: Path, destination: Path, selected: list[int], session_id: int
     ) -> None:
         super().__init__()
         self.source = source
         self.destination = destination
-        self.selected = selected
+        self.selected = list(selected)
         self.session_id = session_id
         self.signals = ExportSignals()
 

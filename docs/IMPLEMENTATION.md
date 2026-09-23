@@ -8,8 +8,8 @@ PDFPick 是 Windows 優先的 Python 桌面程式，功能是：
 
 1. 開啟單一 PDF。
 2. 顯示所有頁面的可捲動預覽。
-3. 手動或依奇偶頁選取頁面。
-4. 依來源順序將選取頁面輸出成新 PDF。
+3. 拖曳縮圖或把手調整頁面排列，手動或依原始頁碼的奇偶選取頁面。
+4. 依畫面排列順序將選取頁面輸出成新 PDF。
 
 執行環境由 `uv` 管理，Python 版本需求為 3.11 以上。
 
@@ -84,7 +84,8 @@ tests/
 | `source_path` | 目前來源 PDF；未載入時為 `None` |
 | `page_count` | 來源頁數 |
 | `selected_pages` | 已選頁面的零起始索引集合 |
-| `page_cards` | 依來源順序排列的 `PageCard` |
+| `page_cards` | 依原始頁碼索引存放的 `PageCard`；背景預覽以此索引更新卡片 |
+| `page_order` | 畫面與輸出的原始頁碼索引順序；拖曳時只改動此清單 |
 | `session_id` | 每次重新載入檔案時遞增，用來淘汰舊載入／輸出結果 |
 | `render_generation` | 每次重新渲染時遞增，用來淘汰舊比例的縮圖 |
 | `_render_pending` | 目前世代尚未收到的縮圖數量 |
@@ -194,7 +195,7 @@ render_scale = slider_percent / 100 × 96 / 72
 
 `core.export_selected_pages()` 的重要行為：
 
-1. 將選取集合排序，因此輸出固定依來源順序。
+1. GUI 依 `page_order` 過濾 `selected_pages` 並傳入有序索引；核心保留清單順序，集合輸入仍依來源順序排序。
 2. 禁止目的地與來源為同一檔案。
 3. 驗證頁碼範圍與來源是否仍存在。
 4. 使用 pypdf 直接加入原始頁面，不以縮圖重建 PDF。
@@ -203,7 +204,7 @@ render_scale = slider_percent / 100 × 96 / 72
 7. 寫入完成並 `fsync()` 後，以 `os.replace()` 原子替換目的檔。
 8. 發生錯誤時刪除暫存檔，不留下半成品。
 
-若未來要支援拖曳排序，不能再對選取集合使用 `sorted()`；資料模型需從 `set[int]` 改為能表達順序且避免重複的結構。
+拖曳排序只移動 `page_order` 的原始頁碼索引，`page_cards` 和 `selected_pages` 仍以原始頁碼識別頁面。單雙數選取完全不受畫面位置影響。
 
 ## 11. 主題、字型與圖示
 
@@ -229,7 +230,8 @@ render_scale = slider_percent / 100 × 96 / 72
 
 - 奇偶頁選取、清除與三態判定。
 - 預設輸出檔名。
-- 非連續頁依來源順序輸出。
+- 集合選取依來源順序輸出；有序清單依拖曳順序輸出。
+- 拖曳重排後，畫面順序、原始頁碼奇偶選取與實際輸出一致。
 - 輸出後頁面尺寸保持不變。
 - 空選取與覆蓋來源檔的拒絕行為。
 - 損壞與密碼保護 PDF。
@@ -249,7 +251,7 @@ render_scale = slider_percent / 100 × 96 / 72
 | 改縮圖格式或品質 | `render_worker.render_document()` | 主程序目前假設收到可由 `QImage` 讀取的路徑 |
 | 改背景任務排程 | `renderer.RenderService` | 保留 generation 淘汰機制 |
 | 新增選取方式 | `core.py` 純函式及 `_selection_updated()` | 以零起始索引為內部標準 |
-| 改輸出順序 | `core.export_selected_pages()` | 目前 `sorted(set(selected))` 強制來源順序 |
+| 改輸出順序 | `MainWindow.page_order`、`_move_page()`、`core.export_selected_pages()` | 保持原始頁碼索引與畫面位置分離 |
 | 支援加密 PDF | `core.inspect_pdf()` 與輸出流程 | 需設計密碼輸入及密碼生命週期 |
 | 更換圖示 | `assets/` 與 `load_app_icon()` | PNG 與 ICO 應同步更新 |
 | 調整深淺色配色 | `ThemeController.apply()` | 必須同時確認兩種系統模式 |
@@ -258,8 +260,7 @@ render_scale = slider_percent / 100 × 96 / 72
 
 - 一次只能載入一個來源 PDF。
 - 不支援密碼保護 PDF。
-- 輸出順序固定為來源順序。
-- 不支援旋轉、裁切、拖曳排序或多 PDF 合併。
+- 不支援旋轉、裁切或多 PDF 合併。
 - 所有已渲染縮圖都保留在記憶體；極大量頁數或 200% 比例可能有較高記憶體用量。若要改善，優先考慮可視區域延遲渲染與縮圖快取淘汰。
 - 後端忙碌時不會中斷目前 PDF，而是等待完成後處理最新要求；大型 PDF 的快速縮放可進一步加入可取消的工作協定。
 - 目前沒有安裝程式或單檔 EXE；`pdfpick.ico` 已準備給後續 PyInstaller 或 Nuitka 打包流程。

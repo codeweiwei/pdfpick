@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self.source_path: Path | None = None
         self.page_count = 0
         self.selected_pages: set[int] = set()
+        self.page_order: list[int] = []
         self.page_cards: list[PageCard] = []
         self.session_id = 0
         self.render_generation = 0
@@ -250,6 +251,7 @@ class MainWindow(QMainWindow):
         self.source_path = None
         self.page_count = 0
         self.selected_pages.clear()
+        self.page_order.clear()
         self.page_cards.clear()
         while (item := self.grid.takeAt(0)) is not None:
             widget = item.widget()
@@ -263,10 +265,12 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(False)
 
     def _create_page_cards(self) -> None:
+        self.page_order = list(range(self.page_count))
         width = self._target_preview_width()
         for page_index in range(self.page_count):
             card = PageCard(page_index, width)
             card.selection_changed.connect(self._page_selection_changed)
+            card.reorder_requested.connect(self._move_page)
             self.page_cards.append(card)
         self._reflow_grid()
 
@@ -287,8 +291,27 @@ class MainWindow(QMainWindow):
         card_width = max(card.width() for card in self.page_cards)
         available = max(1, self.scroll_area.viewport().width() - 24)
         columns = max(1, (available + self.grid.spacing()) // (card_width + self.grid.spacing()))
-        for index, card in enumerate(self.page_cards):
-            self.grid.addWidget(card, index // columns, index % columns)
+        for position, page_index in enumerate(self.page_order):
+            card = self.page_cards[page_index]
+            self.grid.addWidget(card, position // columns, position % columns)
+
+    @Slot(int, int)
+    def _move_page(self, source_index: int, target_index: int) -> None:
+        if self._export_running or source_index == target_index:
+            return
+        if source_index not in self.page_order or target_index not in self.page_order:
+            return
+        source_position = self.page_order.index(source_index)
+        target_position = self.page_order.index(target_index)
+        self.page_order.pop(source_position)
+        insertion = self.page_order.index(target_index)
+        if source_position < target_position:
+            insertion += 1
+        self.page_order.insert(insertion, source_index)
+        self._reflow_grid()
+        self.statusBar().showMessage(
+            f"已調整第 {source_index + 1} 頁的預覽與輸出順序"
+        )
 
     @Slot(int, bool)
     def _page_selection_changed(self, page_index: int, selected: bool) -> None:
@@ -442,7 +465,10 @@ class MainWindow(QMainWindow):
         self.open_button.setEnabled(False)
         self.statusBar().showMessage("正在輸出 PDF…")
         task = ExportPdfTask(
-            self.source_path, destination, set(self.selected_pages), self.session_id
+            self.source_path,
+            destination,
+            [page for page in self.page_order if page in self.selected_pages],
+            self.session_id,
         )
         self._keep_task(task)
         task.signals.completed.connect(self._export_completed)
